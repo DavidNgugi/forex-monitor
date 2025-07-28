@@ -33,7 +33,7 @@ function Header({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolean
       className={`sticky top-0 z-50 backdrop-blur-xl border-b transition-all duration-300 ${
         isAuthenticated 
           ? `${colors.background.card} ${colors.border.primary} shadow-lg` 
-          : `bg-gray-800/80 border-gray-600`
+          : `bg-black/20 backdrop-blur-2xl border-white/10 shadow-2xl`
       }`}
     >
       <div className={`mx-auto px-4 sm:px-6 lg:px-8 ${
@@ -134,7 +134,8 @@ function AppContent() {
 }
 
 function SignInModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { colors } = useTheme()
+  // Always use dark theme for sign-in modal
+  const colors = getThemeColors('dark')
 
   if (!isOpen) return null
 
@@ -155,7 +156,7 @@ function SignInModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
           </div>
           <button
             onClick={onClose}
-            className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors`}
+            className={`p-2 rounded-lg ${colors.background.secondary} hover:${colors.background.tertiary} transition-colors ${colors.text.primary}`}
           >
             <X className="w-5 h-5" />
           </button>

@@ -2,13 +2,15 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useTheme } from "./lib/ThemeContext";
+import { getThemeColors } from "./lib/theme";
 
 export function SignInForm() {
   const { signIn } = useAuthActions();
-  const { colors } = useTheme();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [submitting, setSubmitting] = useState(false);
+
+  // Always use dark theme for sign-in form
+  const colors = getThemeColors('dark');
 
   return (
     <div className="w-full">
@@ -35,14 +37,14 @@ export function SignInForm() {
         }}
       >
         <input
-          className={`w-full px-4 py-3 rounded-lg ${colors.background.secondary} ${colors.border.accent} border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow shadow-sm hover:shadow`}
+          className={`w-full px-4 py-3 rounded-lg ${colors.background.secondary} ${colors.border.accent} border focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow shadow-sm hover:shadow ${colors.text.primary} placeholder-gray-400`}
           type="email"
           name="email"
           placeholder="Email"
           required
         />
         <input
-          className={`w-full px-4 py-3 rounded-lg ${colors.background.secondary} ${colors.border.accent} border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow shadow-sm hover:shadow`}
+          className={`w-full px-4 py-3 rounded-lg ${colors.background.secondary} ${colors.border.accent} border focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow shadow-sm hover:shadow ${colors.text.primary} placeholder-gray-400`}
           type="password"
           name="password"
           placeholder="Password"
