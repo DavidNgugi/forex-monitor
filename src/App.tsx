@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 
 import { Authenticated, Unauthenticated, useQuery } from "convex/react"
 import { useConvexAuth } from "convex/react"
@@ -13,6 +13,7 @@ import ForexDashboard from "./components/ForexDashboard"
 import ThemeToggle from "./components/ThemeToggle"
 import { ThemeProvider } from "./lib/ThemeContext"
 import { useTheme } from "./lib/ThemeContext"
+import { getThemeColors } from "./lib/theme"
 import { TrendingUp, Bell, BarChart3, Zap, Globe, X, LogIn } from "lucide-react"
 
 export default function App() {
@@ -32,7 +33,7 @@ function Header({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolean
       className={`sticky top-0 z-50 backdrop-blur-xl border-b transition-all duration-300 ${
         isAuthenticated 
           ? `${colors.background.card} ${colors.border.primary} shadow-lg` 
-          : `${colors.background.card}/80 ${colors.border.primary}`
+          : `bg-gray-800/80 border-gray-600`
       }`}
     >
       <div className={`mx-auto px-4 sm:px-6 lg:px-8 ${
@@ -53,7 +54,7 @@ function Header({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolean
             <h1 className={`text-xl font-bold transition-colors duration-300 ${
               isAuthenticated 
                 ? colors.text.primary 
-                : colors.text.primary
+                : 'text-white'
             }`}>ForexMonitor Pro</h1>
           </div>
 
@@ -61,8 +62,8 @@ function Header({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolean
           <div className={`flex items-center ${
             isAuthenticated ? 'space-x-3' : 'space-x-4'
           }`}>
-            <ThemeToggle />
             <Authenticated>
+              <ThemeToggle />
               <SignOutButton />
             </Authenticated>
             <Unauthenticated>
@@ -105,27 +106,29 @@ function AppContent() {
         }}
       />
 
-      {/* Footer */}
-      <footer className={`${colors.background.card}/60 border-t ${colors.border.primary}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col sm:flex-row justify-between items-center">
-            <div className={`text-sm ${colors.text.secondary} mb-4 sm:mb-0`}>
-              © {new Date().getFullYear()} ForexMonitor Pro. All rights reserved.
-            </div>
-            <div className={`text-sm ${colors.text.secondary} flex items-center`}>
-              Created with ❤️ by {" "}&nbsp;
-              <a
-                href="https://davidngugi.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline transition-colors"
-              >
-                David Ngugi
-              </a>
+      {/* Footer - Only show for authenticated users */}
+      <Authenticated>
+        <footer className={`${colors.background.card}/60 border-t ${colors.border.primary}`}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex flex-col sm:flex-row justify-between items-center">
+              <div className={`text-sm ${colors.text.secondary} mb-4 sm:mb-0`}>
+                © {new Date().getFullYear()} ForexMonitor Pro. All rights reserved.
+              </div>
+              <div className={`text-sm ${colors.text.secondary} flex items-center`}>
+                Created with ❤️ by {" "}&nbsp;
+                <a
+                  href="https://davidngugi.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline transition-colors"
+                >
+                  David Ngugi
+                </a>
+              </div>
             </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </Authenticated>
     </div>
   )
 }
@@ -145,7 +148,7 @@ function SignInModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
         className={`relative w-full max-w-md ${colors.background.card} rounded-2xl shadow-2xl border ${colors.border.primary} overflow-hidden`}
       >
         {/* Header */}
-        <div className={`flex items-center justify-between p-6 border-b}`}>
+        <div className={`flex items-center justify-between p-6 border-b ${colors.border.primary}`}>
           <div>
             <h2 className={`text-2xl font-bold ${colors.text.primary}`}>Welcome Back</h2>
             <p className={`text-sm ${colors.text.secondary} mt-1`}>Sign in to access your dashboard</p>
@@ -167,6 +170,118 @@ function SignInModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
     </div>
   )
 }
+
+// Aurora Background Component
+const AuroraBackground: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    let time = 0;
+    const animate = (timestamp: number) => {
+      time += 0.016; // 60fps
+      
+      // Clear canvas with gradient background
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#0f0f23');
+      gradient.addColorStop(0.5, '#1a1a2e');
+      gradient.addColorStop(1, '#16213e');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Create aurora effect
+      const auroraLayers = [
+        { color: '#4f46e5', speed: 0.5, amplitude: 0.3, frequency: 0.02 },
+        { color: '#7c3aed', speed: 0.3, amplitude: 0.4, frequency: 0.015 },
+        { color: '#06b6d4', speed: 0.7, amplitude: 0.25, frequency: 0.025 }
+      ];
+
+      auroraLayers.forEach((layer, layerIndex) => {
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height);
+
+        // Create aurora curve
+        for (let x = 0; x <= canvas.width; x += 2) {
+          const normalizedX = x / canvas.width;
+          const wave1 = Math.sin(normalizedX * 4 + time * layer.speed) * layer.amplitude;
+          const wave2 = Math.sin(normalizedX * 8 + time * layer.speed * 0.5) * layer.amplitude * 0.5;
+          const wave3 = Math.sin(normalizedX * 12 + time * layer.speed * 0.3) * layer.amplitude * 0.3;
+          
+          const y = canvas.height * 0.3 + 
+                   (wave1 + wave2 + wave3) * canvas.height * 0.2 +
+                   Math.sin(time * 0.5 + layerIndex) * 20;
+
+          ctx.lineTo(x, y);
+        }
+
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.closePath();
+
+        // Create gradient for aurora
+        const auroraGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        auroraGradient.addColorStop(0, `${layer.color}40`);
+        auroraGradient.addColorStop(0.5, `${layer.color}20`);
+        auroraGradient.addColorStop(1, `${layer.color}00`);
+
+        ctx.fillStyle = auroraGradient;
+        ctx.fill();
+
+        // Add glow effect
+        ctx.shadowColor = layer.color;
+        ctx.shadowBlur = 20;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      // Add floating particles
+      for (let i = 0; i < 50; i++) {
+        const x = (Math.sin(time * 0.5 + i * 0.1) * 0.5 + 0.5) * canvas.width;
+        const y = (Math.cos(time * 0.3 + i * 0.2) * 0.5 + 0.5) * canvas.height;
+        const size = Math.sin(time + i) * 2 + 3;
+        const opacity = Math.sin(time * 0.5 + i) * 0.3 + 0.7;
+
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.3})`;
+        ctx.fill();
+      }
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animate(0);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      window.removeEventListener('resize', resizeCanvas);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none"
+      style={{ zIndex: 0 }}
+    />
+  );
+};
 
 function Content({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolean) => void }) {
   const { colors } = useTheme()
@@ -190,33 +305,34 @@ function Content({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolea
       </Authenticated>
 
       <Unauthenticated>
-        <div className="relative overflow-hidden">
-          {/* Hero Section */}
-          <div className="relative px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-            <div className="max-w-7xl mx-auto">
-              <div className="text-center">
-                        <div
-          className={`inline-flex items-center px-4 py-2 rounded-full ${colors.background.tertiary} ${colors.border.accent}/20 border mb-4`}
-        >
-                  <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400 mr-2" />
-                  <span className={`text-sm font-medium ${colors.status.accent}`}>Real-time forex monitoring</span>
+        <div className="relative overflow-hidden flex flex-col h-screen">
+          {/* Aurora Background */}
+          <div className="relative flex-1 flex flex-col">
+            <AuroraBackground />
+            
+            {/* Hero Section */}
+            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 text-center">
+              <div className="max-w-4xl mx-auto animate-fade-in">
+                <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 mb-4 animate-fade-in">
+                  <Zap className="w-4 h-4 text-blue-400 mr-2" />
+                  <span className="text-sm font-medium text-blue-300">Real-time forex monitoring</span>
                 </div>
 
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-4">
-                  <span className={`${colors.text.primary}`}>Trade Smarter</span>
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-4 animate-scale-in">
+                  <span className="text-white">Trade Smarter</span>
                   <br />
-                  <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 bg-clip-text text-transparent">
+                  <span className="bg-gradient-to-r from-white via-purple-200 to-white bg-clip-text text-transparent">
                     With Confidence
                   </span>
                 </h1>
 
-                <p className={`text-lg sm:text-xl ${colors.text.secondary} mb-8 max-w-3xl mx-auto leading-relaxed`}>
+                <p className="text-lg sm:text-xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed animate-fade-in-delay">
                   Professional forex monitoring with real-time rates, intelligent alerts, and comprehensive market
                   analysis—all in one powerful platform.
                 </p>
 
                 {/* CTA Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8 animate-slide-up">
                   <button
                     onClick={() => setIsSignInModalOpen(true)}
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
@@ -226,7 +342,7 @@ function Content({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolea
                   </button>
                   <button
                     onClick={() => setIsSignInModalOpen(true)}
-                    className={`inline-flex items-center px-6 py-3 ${colors.background.card} ${colors.text.primary} font-semibold rounded-xl border ${colors.border.primary}/20 hover:${colors.background.secondary} transition-all duration-200 shadow-lg hover:shadow-xl`}
+                    className="inline-flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-xl border border-white/20 hover:bg-white/20 transition-all duration-200 shadow-lg hover:shadow-xl"
                   >
                     <BarChart3 className="w-4 h-4 mr-2" />
                     View Demo
@@ -235,7 +351,7 @@ function Content({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolea
               </div>
 
               {/* Features Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto pb-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto animate-slide-up">
                 <FeatureCard
                   icon={<BarChart3 className="w-8 h-8" />}
                   title="Real-time Rates"
@@ -256,14 +372,34 @@ function Content({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolea
                 />
               </div>
             </div>
+
+            {/* Floating elements */}
+            <div className="absolute top-20 left-10 w-4 h-4 bg-purple-400 rounded-full opacity-60 animate-float-1" />
+            <div className="absolute top-40 right-20 w-3 h-3 bg-blue-400 rounded-full opacity-60 animate-float-2" />
+            <div className="absolute bottom-40 left-20 w-2 h-2 bg-pink-400 rounded-full opacity-60 animate-float-3" />
           </div>
 
-          {/* Background Elements */}
-          <div className="absolute inset-0 -z-10">
-            <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-purple-400/20 rounded-full blur-3xl"></div>
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-blue-400/10 to-purple-400/10 rounded-full blur-3xl"></div>
-          </div>
+          {/* Footer */}
+          <footer className="relative z-10 bg-black/20 backdrop-blur-sm border-t border-white/10 flex-shrink-0">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+              <div className="flex flex-col sm:flex-row justify-between items-center">
+                <div className="text-sm text-gray-300 mb-4 sm:mb-0">
+                  © {new Date().getFullYear()} ForexMonitor Pro. All rights reserved.
+                </div>
+                <div className="text-sm text-gray-300 flex items-center">
+                  Created with ❤️ by {" "}&nbsp;
+                  <a
+                    href="https://davidngugi.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 underline transition-colors"
+                  >
+                    David Ngugi
+                  </a>
+                </div>
+              </div>
+            </div>
+          </footer>
         </div>
       </Unauthenticated>
     </div>
@@ -281,8 +417,6 @@ function FeatureCard({
   description: string
   gradient: string
 }) {
-  const { colors } = useTheme()
-
   return (
     <div className="group relative h-full">
       <div
@@ -291,17 +425,18 @@ function FeatureCard({
       ></div>
 
       <div
-        className={`relative h-full flex flex-col ${colors.background.card}/80 backdrop-blur-xl rounded-2xl p-6 ${colors.border.primary}/20 border shadow-lg hover:shadow-2xl transition-all duration-300 group-hover:scale-105`}
+        className="relative h-full flex flex-col bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-2xl transition-all duration-300 group-hover:scale-105"
       >
-        <div
-          className={`inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-r ${gradient} text-white mb-4 shadow-lg flex-shrink-0`}
-        >
-          {icon}
+        <div className="flex items-center mb-4">
+          <div
+            className={`inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-r ${gradient} text-white shadow-lg flex-shrink-0 mr-4`}
+          >
+            {icon}
+          </div>
+          <h3 className="text-lg font-bold text-white flex-shrink-0">{title}</h3>
         </div>
 
-        <h3 className={`text-lg font-bold ${colors.text.primary} mb-3 flex-shrink-0`}>{title}</h3>
-
-        <p className={`${colors.text.secondary} leading-relaxed text-sm flex-1`}>{description}</p>
+        <p className="text-gray-300 leading-relaxed text-sm flex-1">{description}</p>
       </div>
     </div>
   )
