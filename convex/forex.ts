@@ -307,7 +307,7 @@ export const fetchExchangeRatesAndCheckAlerts = action({
   },
 });
 
-// Store historical rate for trend tracking
+// Store historical rate for trend tracking with smart retention
 export const storeHistoricalRate = internalMutation({
   args: {
     baseCurrency: v.string(),
@@ -315,14 +315,120 @@ export const storeHistoricalRate = internalMutation({
     rate: v.number(),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("historicalRates", {
-      baseCurrency: args.baseCurrency,
-      targetCurrency: args.targetCurrency,
-      rate: args.rate,
-      timestamp: Date.now(),
-    });
+    const now = Date.now();
+    const timestamp = now;
+    
+    // Smart retention intervals (in milliseconds)
+    const intervals = {
+      minute: 60 * 1000,      // 1 minute
+      fiveMinutes: 5 * 60 * 1000,  // 5 minutes
+      hour: 60 * 60 * 1000,   // 1 hour
+      sixHours: 6 * 60 * 60 * 1000, // 6 hours
+      day: 24 * 60 * 60 * 1000,     // 24 hours
+    };
+    
+    // Check if we should store this rate based on time intervals
+    const shouldStore = await shouldStoreHistoricalRate(ctx, args.baseCurrency, args.targetCurrency, timestamp, intervals);
+    
+    if (shouldStore) {
+      await ctx.db.insert("historicalRates", {
+        baseCurrency: args.baseCurrency,
+        targetCurrency: args.targetCurrency,
+        rate: args.rate,
+        timestamp: timestamp,
+      });
+      
+      // Clean up old data to prevent unlimited growth
+      await cleanupOldHistoricalRates(ctx, args.baseCurrency, args.targetCurrency);
+    }
   },
 });
+
+// Helper function to determine if we should store a historical rate
+async function shouldStoreHistoricalRate(
+  ctx: any,
+  baseCurrency: string,
+  targetCurrency: string,
+  currentTimestamp: number,
+  intervals: Record<string, number>
+): Promise<boolean> {
+  // Always store if no previous records exist
+  const existingRecords = await ctx.db
+    .query("historicalRates")
+    .withIndex("by_pair", (q: any) => 
+      q.eq("baseCurrency", baseCurrency)
+       .eq("targetCurrency", targetCurrency)
+    )
+    .order("desc")
+    .take(1);
+  
+  if (existingRecords.length === 0) {
+    return true;
+  }
+  
+  const lastRecord = existingRecords[0];
+  const timeSinceLastRecord = currentTimestamp - lastRecord.timestamp;
+  
+  // Store based on time intervals
+  if (timeSinceLastRecord >= intervals.day) {
+    return true; // Store daily records
+  }
+  
+  if (timeSinceLastRecord >= intervals.sixHours) {
+    return true; // Store 6-hour records
+  }
+  
+  if (timeSinceLastRecord >= intervals.hour) {
+    return true; // Store hourly records
+  }
+  
+  if (timeSinceLastRecord >= intervals.fiveMinutes) {
+    return true; // Store 5-minute records
+  }
+  
+  if (timeSinceLastRecord >= intervals.minute) {
+    return true; // Store minute records
+  }
+  
+  return false; // Don't store if too recent
+}
+
+// Clean up old historical rates to prevent unlimited growth
+async function cleanupOldHistoricalRates(
+  ctx: any,
+  baseCurrency: string,
+  targetCurrency: string
+): Promise<void> {
+  const now = Date.now();
+  const retentionPeriods = {
+    minuteRecords: 60 * 60 * 1000,      // Keep minute records for 1 hour
+    fiveMinuteRecords: 24 * 60 * 60 * 1000,  // Keep 5-min records for 24 hours
+    hourlyRecords: 7 * 24 * 60 * 60 * 1000, // Keep hourly records for 7 days
+    sixHourRecords: 30 * 24 * 60 * 60 * 1000, // Keep 6-hour records for 30 days
+    dailyRecords: 90 * 24 * 60 * 60 * 1000,   // Keep daily records for 90 days
+  };
+  
+  // Delete records older than 90 days (keep only daily records beyond this)
+  const cutoffTime = now - retentionPeriods.dailyRecords;
+  
+  const oldRecords = await ctx.db
+    .query("historicalRates")
+    .withIndex("by_pair", (q: any) => 
+      q.eq("baseCurrency", baseCurrency)
+       .eq("targetCurrency", targetCurrency)
+    )
+    .filter((q: any) => q.lt(q.field("timestamp"), cutoffTime))
+    .collect();
+  
+  // Delete old records in batches to avoid timeouts
+  const batchSize = 100;
+  for (let i = 0; i < oldRecords.length; i += batchSize) {
+    const batch = oldRecords.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map((record: any) => ctx.db.delete(record._id))
+    );
+  }
+}
 
 // Get historical rates for a currency pair
 export const getHistoricalRates = query({
@@ -581,4 +687,59 @@ export const getUserNewsCountry = query({
     return prefs?.newsCountry || null;
   },
 });
+
+// Cron job to clean up old historical rates across all pairs
+export const cleanupAllHistoricalRates = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const now = Date.now();
+    const cutoffTime = now - (90 * 24 * 60 * 60 * 1000); // 90 days
+    
+    // Get all unique currency pairs
+    const allPairs = await ctx.db
+      .query("historicalRates")
+      .withIndex("by_timestamp", (q: any) => q.lt("timestamp", cutoffTime))
+      .collect();
+    
+    // Group by currency pair to avoid duplicates
+    const pairMap = new Map<string, any[]>();
+    for (const record of allPairs) {
+      const pairKey = `${record.baseCurrency}-${record.targetCurrency}`;
+      if (!pairMap.has(pairKey)) {
+        pairMap.set(pairKey, []);
+      }
+      pairMap.get(pairKey)!.push(record);
+    }
+    
+    // Delete old records for each pair
+    const batchSize = 50;
+    for (const [pairKey, records] of pairMap) {
+      for (let i = 0; i < records.length; i += batchSize) {
+        const batch = records.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map((record: any) => ctx.db.delete(record._id))
+        );
+      }
+    }
+    
+    return null;
+  },
+});
+
+// Manual cleanup function for testing and maintenance
+export const manualCleanup = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    
+    // Run the cleanup function
+    await ctx.runMutation(internal.forex.cleanupAllHistoricalRates, {});
+    return null;
+  },
+});
+
+
 
