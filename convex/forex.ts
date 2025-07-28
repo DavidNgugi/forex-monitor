@@ -741,5 +741,114 @@ export const manualCleanup = mutation({
   },
 });
 
+// Fetch historical daily data from external API for longer timeframes
+export const fetchHistoricalDailyRates = action({
+  args: {
+    baseCurrency: v.string(),
+    targetCurrency: v.string(),
+    startDate: v.string(), // Format: "YYYY-MM-DD"
+    endDate: v.string(),   // Format: "YYYY-MM-DD"
+  },
+  returns: v.array(v.object({
+    date: v.string(),
+    rate: v.number(),
+  })),
+  handler: async (ctx, args) => {
+    try {
+      const API_KEY = process.env.CONVEX_EXCHANGERATE_API_KEY;
+      if (!API_KEY) {
+        throw new Error("Exchange Rate API key not configured");
+      }
+
+      const results = [];
+      const start = new Date(args.startDate);
+      const end = new Date(args.endDate);
+      
+      // Fetch daily data for each date in range
+      for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1; // getMonth() returns 0-11
+        const day = date.getDate();
+        
+        const url = `https://v6.exchangerate-api.com/v6/${API_KEY}/history/${args.baseCurrency}/${year}/${month}/${day}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.warn(`Failed to fetch data for ${year}-${month}-${day}: ${response.status}`);
+          continue;
+        }
+        
+        const data = await response.json();
+        if (data.result === "success" && data.conversion_rates && data.conversion_rates[args.targetCurrency]) {
+          results.push({
+            date: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`,
+            rate: data.conversion_rates[args.targetCurrency],
+          });
+        }
+        
+        // Add delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      return results;
+    } catch (error) {
+      console.error("Failed to fetch historical daily rates:", error);
+      throw error;
+    }
+  },
+});
+
+// Get historical data optimized for different timeframes
+export const getOptimizedHistoricalRates = query({
+  args: {
+    baseCurrency: v.string(),
+    targetCurrency: v.string(),
+    timeFrame: v.union(v.literal("1D"), v.literal("1W"), v.literal("1M"), v.literal("3M"), v.literal("1Y")),
+  },
+  returns: v.array(v.object({
+    date: v.string(),
+    rate: v.number(),
+    timestamp: v.number(),
+  })),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    let cutoffTime: number;
+    
+    switch (args.timeFrame) {
+      case "1D": {
+        // Use stored hourly/minute data for 1D
+        cutoffTime = now - (24 * 60 * 60 * 1000);
+        const hourlyData = await ctx.db
+          .query("historicalRates")
+          .withIndex("by_pair", (q) => 
+            q.eq("baseCurrency", args.baseCurrency)
+             .eq("targetCurrency", args.targetCurrency)
+          )
+          .filter((q) => q.gte(q.field("timestamp"), cutoffTime))
+          .order("asc")
+          .collect();
+        
+        return hourlyData.map(rate => ({
+          date: new Date(rate.timestamp).toISOString().split('T')[0],
+          rate: rate.rate,
+          timestamp: rate.timestamp,
+        }));
+      }
+        
+      case "1W":
+      case "1M":
+      case "3M":
+      case "1Y":
+        // For longer timeframes, use daily data from external API
+        // This would need to be called from the frontend with the action
+        // For now, return empty array - frontend should call fetchHistoricalDailyRates
+        return [];
+        
+      default:
+        return [];
+    }
+  },
+});
+
 
 

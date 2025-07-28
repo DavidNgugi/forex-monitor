@@ -1,54 +1,100 @@
 # Forex Exchange Monitor Application
-  
-Monitor forex exchange rates and news in real-time.
-  
-## Project structure
-  
-The frontend code is in the `app` directory and is built with [Vite](https://vitejs.dev/).
-  
-The backend code is in the `convex` directory.
-  
-`npm run dev` will start the frontend and backend servers.
+
+A real-time forex exchange rate monitoring application built with Convex, React, and TypeScript.
 
 ## Features
 
-### Real-time RSS News Feeds
-The application includes a comprehensive RSS feed system that provides real-time financial news from multiple sources:
-
-- **Country-specific feeds**: News sources tailored for different regions (US, UK, EU, Kenya, Nigeria, South Africa)
-- **Multiple sources per country**: Each country has 3+ RSS feeds for comprehensive coverage
-- **Automatic fallback**: If RSS feeds are unavailable, the system falls back to curated mock data
-- **User preferences**: Country selection is saved per user and persists across sessions
-- **Real-time updates**: News can be refreshed manually with a dedicated refresh button
-
-**Supported RSS Sources:**
-- **US**: Reuters, Bloomberg, MarketWatch
-- **UK**: Reuters UK, Financial Times, BBC Business
-- **EU**: Reuters, Euronews, Bloomberg
-- **Kenya**: Business Daily, The Star, Nation
-- **Nigeria**: Premium Times, Vanguard, Punch
-- **South Africa**: Business Live, Moneyweb, Fin24
-
-### Forex Monitoring
 - Real-time exchange rate monitoring
-- Customizable currency pairs
-- Price alerts and notifications
-- Historical data tracking
+- Historical data charts with multiple timeframes (1D, 1W, 1M, 3M, 1Y)
+- Currency pair management
+- Price alerts
+- News integration
+- YouTube stream integration
+- Responsive design
 
-### Authentication
-Chef apps use [Convex Auth](https://auth.convex.dev/) with Anonymous auth for easy sign in. You may wish to change this before deploying your app.
+## Hybrid Data Approach
 
-## App authentication
+This application uses a hybrid approach for historical data:
 
-Chef apps use [Convex Auth](https://auth.convex.dev/) with Anonymous auth for easy sign in. You may wish to change this before deploying your app.
+### Short-term Data (1D charts)
+- Uses stored real-time data from the current exchange rate API
+- Provides hourly/minute granularity for intraday analysis
+- Data is automatically collected and stored in the database
 
-## Developing and deploying your app
+### Long-term Data (1W, 1M, 3M, 1Y charts)
+- Uses the Exchange Rate API's historical endpoint
+- Provides daily granularity for trend analysis
+- Fetched on-demand to avoid storage costs
 
-Check out the [Convex docs](https://docs.convex.dev/) for more information on how to develop with Convex.
-* If you're new to Convex, the [Overview](https://docs.convex.dev/understanding/) is a good place to start
-* Check out the [Hosting and Deployment](https://docs.convex.dev/production/) docs for how to deploy your app
-* Read the [Best Practices](https://docs.convex.dev/understanding/best-practices/) guide for tips on how to improve you app further
+## Environment Variables
 
-## HTTP API
+Create a `.env.local` file in your project root with the following variables:
 
-User-defined http routes are defined in the `convex/router.ts` file. We split these routes into a separate file from `convex/http.ts` to allow us to prevent the LLM from modifying the authentication routes.
+```bash
+# Exchange Rate API (for historical data)
+CONVEX_EXCHANGERATE_API_KEY=your_exchange_rate_api_key_here
+
+# NewsData.io API (for news features)
+CONVEX_NEWSDATA_API_KEY=your_newsdata_api_key_here
+```
+
+### API Keys Required
+
+1. **Exchange Rate API**: Get your free API key from [exchangerate-api.com](https://www.exchangerate-api.com/)
+   - Used for historical daily data
+   - Free tier includes 1,500 requests per month
+
+2. **NewsData.io API**: Get your API key from [newsdata.io](https://newsdata.io/)
+   - Used for forex-related news
+   - Free tier includes 200 requests per day
+
+## Installation
+
+```bash
+npm install
+```
+
+## Development
+
+```bash
+npm run dev
+```
+
+## Deployment
+
+```bash
+npx convex deploy
+```
+
+## Data Sources
+
+- **Real-time rates**: [exchangerate-api.com](https://www.exchangerate-api.com/)
+- **Historical data**: [exchangerate-api.com](https://www.exchangerate-api.com/) (historical endpoint)
+- **News**: [newsdata.io](https://newsdata.io/)
+
+## Architecture
+
+- **Frontend**: React + TypeScript + Tailwind CSS
+- **Backend**: Convex (serverless database and functions)
+- **Real-time**: Convex subscriptions
+- **Charts**: Custom SVG implementation
+- **State Management**: Convex queries and mutations
+
+## Chart Timeframes
+
+- **1D**: Uses stored hourly data for intraday analysis
+- **1W**: Uses external API daily data
+- **1M**: Uses external API daily data
+- **3M**: Uses external API daily data
+- **1Y**: Uses external API daily data
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+MIT

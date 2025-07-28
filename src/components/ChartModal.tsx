@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { X, TrendingUp } from 'lucide-react';
-import { useQuery } from 'convex/react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 
 interface ChartModalProps {
@@ -25,13 +25,15 @@ const ChartModal: React.FC<ChartModalProps> = ({ pair, onClose }) => {
   const [selectedTimeFrame, setSelectedTimeFrame] = useState<TimeFrame>('1M');
   const [hoveredPoint, setHoveredPoint] = useState<ChartPoint | null>(null);
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
+  const [externalHistoricalData, setExternalHistoricalData] = useState<Array<{date: string, rate: number}>>([]);
+  const [isLoadingExternal, setIsLoadingExternal] = useState(false);
 
   // Get real exchange rate data
   const exchangeRates = useQuery(api.forex.getExchangeRates, {
     baseCurrency: pair.baseCurrency
   });
 
-  // Get historical data
+  // Get historical data for 1D timeframe (from stored data)
   const historicalRates = useQuery(api.forex.getHistoricalRates, {
     baseCurrency: pair.baseCurrency,
     targetCurrency: pair.targetCurrency,
@@ -41,55 +43,100 @@ const ChartModal: React.FC<ChartModalProps> = ({ pair, onClose }) => {
            selectedTimeFrame === '3M' ? 2160 : 8760, // 1Y = 8760 hours
   });
 
+  // Action to fetch external historical data
+  const fetchHistoricalDailyRates = useAction(api.forex.fetchHistoricalDailyRates);
+
   const currentRate = exchangeRates?.rates?.[pair.targetCurrency];
+
+  // Fetch external historical data for longer timeframes
+  useEffect(() => {
+    if (selectedTimeFrame === '1D') {
+      setExternalHistoricalData([]);
+      return;
+    }
+
+    const fetchExternalData = async () => {
+      setIsLoadingExternal(true);
+      try {
+        const endDate = new Date().toISOString().split('T')[0];
+        let startDate: string;
+        
+        switch (selectedTimeFrame) {
+          case '1W':
+            startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            break;
+          case '1M':
+            startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            break;
+          case '3M':
+            startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            break;
+          case '1Y':
+            startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            break;
+          default:
+            startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        }
+
+        const data = await fetchHistoricalDailyRates({
+          baseCurrency: pair.baseCurrency,
+          targetCurrency: pair.targetCurrency,
+          startDate,
+          endDate,
+        });
+
+        setExternalHistoricalData(data);
+      } catch (error) {
+        console.error('Failed to fetch external historical data:', error);
+        setExternalHistoricalData([]);
+      } finally {
+        setIsLoadingExternal(false);
+      }
+    };
+
+    void fetchExternalData();
+  }, [selectedTimeFrame, pair.baseCurrency, pair.targetCurrency, fetchHistoricalDailyRates]);
 
   // Process historical data for chart
   const chartData = useMemo(() => {
-    if (!historicalRates || historicalRates.length === 0) {
-      return [];
-    }
-
-    // Sort by timestamp and group by time intervals based on selected time frame
-    const sortedRates = [...historicalRates].sort((a, b) => a.timestamp - b.timestamp);
-    
-    let interval: number;
-    switch (selectedTimeFrame) {
-      case '1D':
-        interval = 60 * 60 * 1000; // 1 hour
-        break;
-      case '1W':
-        interval = 24 * 60 * 60 * 1000; // 1 day
-        break;
-      case '1M':
-        interval = 24 * 60 * 60 * 1000; // 1 day
-        break;
-      case '3M':
-        interval = 3 * 24 * 60 * 60 * 1000; // 3 days
-        break;
-      case '1Y':
-        interval = 7 * 24 * 60 * 60 * 1000; // 1 week
-        break;
-      default:
-        interval = 24 * 60 * 60 * 1000;
-    }
-
-    // Group data points by intervals
-    const groupedData: { [key: number]: number[] } = {};
-    
-    sortedRates.forEach(rate => {
-      const intervalKey = Math.floor(rate.timestamp / interval) * interval;
-      if (!groupedData[intervalKey]) {
-        groupedData[intervalKey] = [];
+    if (selectedTimeFrame === '1D') {
+      // Use stored data for 1D
+      if (!historicalRates || historicalRates.length === 0) {
+        return [];
       }
-      groupedData[intervalKey].push(rate.rate);
-    });
 
-    // Calculate average for each interval and create chart data
-    return Object.entries(groupedData).map(([timestamp, rates]) => ({
-      date: new Date(parseInt(timestamp)),
-      rate: rates.reduce((sum, rate) => sum + rate, 0) / rates.length,
-    }));
-  }, [historicalRates, selectedTimeFrame]);
+      // Sort by timestamp and group by time intervals
+      const sortedRates = [...historicalRates].sort((a, b) => a.timestamp - b.timestamp);
+      
+      // Group data points by hourly intervals
+      const groupedData: { [key: number]: number[] } = {};
+      const interval = 60 * 60 * 1000; // 1 hour
+      
+      sortedRates.forEach(rate => {
+        const intervalKey = Math.floor(rate.timestamp / interval) * interval;
+        if (!groupedData[intervalKey]) {
+          groupedData[intervalKey] = [];
+        }
+        groupedData[intervalKey].push(rate.rate);
+      });
+
+      // Calculate average for each interval and create chart data
+      return Object.entries(groupedData).map(([timestamp, rates]) => ({
+        date: new Date(parseInt(timestamp)),
+        rate: rates.reduce((sum, rate) => sum + rate, 0) / rates.length,
+      }));
+    } else {
+      // Use external data for longer timeframes
+      if (externalHistoricalData.length === 0) {
+        return [];
+      }
+
+      return externalHistoricalData.map(item => ({
+        date: new Date(item.date),
+        rate: item.rate,
+      }));
+    }
+  }, [historicalRates, externalHistoricalData, selectedTimeFrame]);
 
   const minRate = chartData.length > 0 ? Math.min(...chartData.map(d => d.rate)) : 0;
   const maxRate = chartData.length > 0 ? Math.max(...chartData.map(d => d.rate)) : 0;
@@ -195,7 +242,7 @@ const ChartModal: React.FC<ChartModalProps> = ({ pair, onClose }) => {
     });
   }, [pair, selectedTimeFrame, currentRate, chartPoints.length, historicalRates?.length, minRate, maxRate, range]);
 
-  if (!currentRate) {
+  if (!currentRate || (selectedTimeFrame !== '1D' && isLoadingExternal)) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
@@ -211,7 +258,9 @@ const ChartModal: React.FC<ChartModalProps> = ({ pair, onClose }) => {
             </button>
           </div>
           <div className="p-6 text-center">
-            <div className="text-gray-500">Loading exchange rate data...</div>
+            <div className="text-gray-500">
+              {!currentRate ? "Loading exchange rate data..." : "Loading historical data..."}
+            </div>
           </div>
         </div>
       </div>
