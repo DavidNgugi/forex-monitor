@@ -305,13 +305,13 @@ function Content({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolea
       </Authenticated>
 
       <Unauthenticated>
-        <div className="relative overflow-hidden flex flex-col h-screen">
+        <div className="relative overflow-hidden flex flex-col min-h-screen bg-black">
           {/* Aurora Background */}
-          <div className="relative flex-1 flex flex-col">
+          <div className="relative flex-1 flex flex-col bg-black">
             <AuroraBackground />
             
             {/* Hero Section */}
-            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 text-center">
+            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 text-center py-8">
               <div className="max-w-4xl mx-auto animate-fade-in">
                 <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 mb-4 animate-fade-in">
                   <Zap className="w-4 h-4 text-blue-400 mr-2" />
