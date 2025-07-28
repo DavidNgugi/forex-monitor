@@ -172,19 +172,18 @@ export const getExchangeRate = query({
     targetCurrency: v.string(),
   },
   handler: async (ctx, args) => {
-    // First check if we have a recent cached rate
-    const cachedRate = await ctx.db
+    // Get the current rate for this currency pair
+    const currentRate = await ctx.db
       .query("exchangeRates")
       .withIndex("by_pair", (q) => 
         q.eq("baseCurrency", args.baseCurrency)
          .eq("targetCurrency", args.targetCurrency)
       )
-      .order("desc")
-      .first();
+      .unique();
 
     // Return cached rate if it's less than 5 minutes old
-    if (cachedRate && (Date.now() - cachedRate.timestamp) < 5 * 60 * 1000) {
-      return cachedRate.rate;
+    if (currentRate && (Date.now() - currentRate.timestamp) < 5 * 60 * 1000) {
+      return currentRate.rate;
     }
 
     // If no recent cache, return null to trigger fresh fetch
@@ -208,26 +207,41 @@ export const getWatchedPairsRates = query({
 
     const rates = [];
     for (const pair of prefs.watchedPairs) {
-      const cachedRate = await ctx.db
+      const currentRate = await ctx.db
         .query("exchangeRates")
         .withIndex("by_pair", (q) => 
           q.eq("baseCurrency", pair.baseCurrency)
            .eq("targetCurrency", pair.targetCurrency)
         )
-        .order("desc")
-        .first();
+        .unique();
 
       rates.push({
         pairId: pair.id,
         baseCurrency: pair.baseCurrency,
         targetCurrency: pair.targetCurrency,
-        rate: cachedRate?.rate || null,
-        lastUpdated: cachedRate?.timestamp || null,
-        needsRefresh: !cachedRate || (Date.now() - cachedRate.timestamp) >= 5 * 60 * 1000,
+        rate: currentRate?.rate || null,
+        lastUpdated: currentRate?.timestamp || null,
+        needsRefresh: !currentRate || (Date.now() - currentRate.timestamp) >= 5 * 60 * 1000,
       });
     }
 
     return rates;
+  },
+});
+
+// Get all current exchange rates (for admin/monitoring purposes)
+export const getAllCurrentRates = query({
+  args: {},
+  returns: v.array(v.object({
+    baseCurrency: v.string(),
+    targetCurrency: v.string(),
+    rate: v.number(),
+    timestamp: v.number(),
+  })),
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("exchangeRates")
+      .collect();
   },
 });
 
@@ -254,8 +268,8 @@ export const fetchExchangeRate = action({
         throw new Error(`Rate not found for ${args.targetCurrency}`);
       }
 
-      // Store only the specific rate we need
-      await ctx.runMutation(internal.forex.storeExchangeRate, {
+      // Store or update the specific rate we need
+      await ctx.runMutation(internal.forex.upsertExchangeRate, {
         baseCurrency: args.baseCurrency,
         targetCurrency: args.targetCurrency,
         rate,
@@ -283,7 +297,7 @@ export const fetchExchangeRate = action({
   },
 });
 
-// Store a single exchange rate (replaces storeExchangeRates)
+// Store or update a single exchange rate
 export const storeExchangeRate = internalMutation({
   args: {
     baseCurrency: v.string(),
@@ -291,12 +305,63 @@ export const storeExchangeRate = internalMutation({
     rate: v.number(),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("exchangeRates", {
-      baseCurrency: args.baseCurrency,
-      targetCurrency: args.targetCurrency,
-      rate: args.rate,
-      timestamp: Date.now(),
-    });
+    // Find existing record for this currency pair
+    const existingRate = await ctx.db
+      .query("exchangeRates")
+      .withIndex("by_pair", (q) => 
+        q.eq("baseCurrency", args.baseCurrency)
+         .eq("targetCurrency", args.targetCurrency)
+      )
+      .unique();
+
+    if (existingRate) {
+      // Update existing record
+      await ctx.db.patch(existingRate._id, {
+        rate: args.rate,
+        timestamp: Date.now(),
+      });
+    } else {
+      // Create new record if none exists
+      await ctx.db.insert("exchangeRates", {
+        baseCurrency: args.baseCurrency,
+        targetCurrency: args.targetCurrency,
+        rate: args.rate,
+        timestamp: Date.now(),
+      });
+    }
+  },
+});
+
+// Helper function to upsert exchange rate (for internal use)
+export const upsertExchangeRate = internalMutation({
+  args: {
+    baseCurrency: v.string(),
+    targetCurrency: v.string(),
+    rate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Try to update existing record first
+    const existingRate = await ctx.db
+      .query("exchangeRates")
+      .withIndex("by_pair", (q) => 
+        q.eq("baseCurrency", args.baseCurrency)
+         .eq("targetCurrency", args.targetCurrency)
+      )
+      .unique();
+
+    if (existingRate) {
+      await ctx.db.patch(existingRate._id, {
+        rate: args.rate,
+        timestamp: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("exchangeRates", {
+        baseCurrency: args.baseCurrency,
+        targetCurrency: args.targetCurrency,
+        rate: args.rate,
+        timestamp: Date.now(),
+      });
+    }
   },
 });
 
@@ -406,6 +471,8 @@ export const storeHistoricalRate = internalMutation({
     const shouldStore = await shouldStoreHistoricalRate(ctx, args.baseCurrency, args.targetCurrency, timestamp, intervals);
     
     if (shouldStore) {
+      // For historical data, we still insert new records for trend analysis
+      // but we can be more selective about what we store
       await ctx.db.insert("historicalRates", {
         baseCurrency: args.baseCurrency,
         targetCurrency: args.targetCurrency,
@@ -571,8 +638,7 @@ export const getTrendData = query({
         q.eq("baseCurrency", args.baseCurrency)
          .eq("targetCurrency", args.targetCurrency)
       )
-      .order("desc")
-      .first();
+      .unique();
 
     const currentRateValue = currentRate?.rate;
 

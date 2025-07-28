@@ -160,9 +160,9 @@ const ForexDashboard: React.FC = () => {
         </div>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Currency Pairs Section */}
-          <div className="xl:col-span-2">
+          <div className="xl:col-span-3">
             <div className={cn("rounded-lg shadow-sm", colors.background.card, colors.border.primary, "border")}>
               <div className={cn("p-4", colors.border.primary, "border-b")}>
                 <h2 className={cn("text-xl font-semibold", colors.text.primary)}>Currency Pairs</h2>
