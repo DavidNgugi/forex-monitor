@@ -25,8 +25,10 @@ const CurrencyPairCard: React.FC<CurrencyPairCardProps> = ({ pair, onRemove }) =
   const [showChartModal, setShowChartModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const exchangeRates = useQuery(api.forex.getExchangeRates, {
+  // Get rate for this specific pair
+  const currentRate = useQuery(api.forex.getExchangeRate, {
     baseCurrency: pair.baseCurrency,
+    targetCurrency: pair.targetCurrency,
   })
 
   const trendData = useQuery(api.forex.getTrendData, {
@@ -34,17 +36,17 @@ const CurrencyPairCard: React.FC<CurrencyPairCardProps> = ({ pair, onRemove }) =
     targetCurrency: pair.targetCurrency,
   })
 
-  const fetchRates = useAction(api.forex.fetchExchangeRatesAndCheckAlerts)
-
-  const currentRate = exchangeRates?.rates?.[pair.targetCurrency]
-  const lastUpdate = exchangeRates?.timestamp
+  const fetchRate = useAction(api.forex.fetchExchangeRate)
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
-      await fetchRates({ baseCurrency: pair.baseCurrency })
+      await fetchRate({ 
+        baseCurrency: pair.baseCurrency,
+        targetCurrency: pair.targetCurrency,
+      })
     } catch (error) {
-      console.error("Failed to refresh rates:", error)
+      console.error("Failed to refresh rate:", error)
     } finally {
       setIsRefreshing(false)
     }
@@ -97,7 +99,8 @@ const CurrencyPairCard: React.FC<CurrencyPairCardProps> = ({ pair, onRemove }) =
     return rate.toFixed(4)
   }
 
-  const isStale = lastUpdate && Date.now() - lastUpdate > 60000
+  // Check if rate needs refresh (older than 5 minutes)
+  const needsRefresh = !currentRate || (Date.now() - (currentRate as any)?.timestamp) > 5 * 60 * 1000
 
   return (
     <>
@@ -221,14 +224,11 @@ const CurrencyPairCard: React.FC<CurrencyPairCardProps> = ({ pair, onRemove }) =
 
           {/* Status Bar */}
           <div className={cn("flex items-center justify-between text-xs mb-3", colors.text.muted)}>
-            <span className={isStale ? colors.status.warning : ""}>
-              {lastUpdate ? (
+            <span className={needsRefresh ? colors.status.warning : ""}>
+              {currentRate ? (
                 <>
-                  {new Date(lastUpdate).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                  {isStale && " ⚠"}
+                  {needsRefresh && "⚠ "}
+                  Live
                 </>
               ) : (
                 "No data"
@@ -283,7 +283,7 @@ const CurrencyPairCard: React.FC<CurrencyPairCardProps> = ({ pair, onRemove }) =
         </div>
       </div>
 
-      {showAlertModal && currentRate && (
+      {showAlertModal && currentRate && typeof currentRate === 'number' && (
         <AlertModal pair={pair} currentRate={currentRate} onClose={() => setShowAlertModal(false)} />
       )}
 

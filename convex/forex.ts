@@ -1,7 +1,7 @@
-import { query, mutation, action, internalMutation } from "./_generated/server";
+import { query, mutation, action, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 
 // Initialize default currency pairs for new users
 export const initializeDefaultPairs = mutation({
@@ -165,42 +165,80 @@ export const deleteAlert = mutation({
   },
 });
 
-// Get latest exchange rates
-export const getExchangeRates = query({
-  args: { baseCurrency: v.string() },
+// Get latest exchange rates for a specific pair
+export const getExchangeRate = query({
+  args: { 
+    baseCurrency: v.string(),
+    targetCurrency: v.string(),
+  },
   handler: async (ctx, args) => {
-    const rates = await ctx.db
+    // First check if we have a recent cached rate
+    const cachedRate = await ctx.db
       .query("exchangeRates")
-      .withIndex("by_base_currency", (q) => q.eq("baseCurrency", args.baseCurrency))
+      .withIndex("by_pair", (q) => 
+        q.eq("baseCurrency", args.baseCurrency)
+         .eq("targetCurrency", args.targetCurrency)
+      )
       .order("desc")
       .first();
+
+    // Return cached rate if it's less than 5 minutes old
+    if (cachedRate && (Date.now() - cachedRate.timestamp) < 5 * 60 * 1000) {
+      return cachedRate.rate;
+    }
+
+    // If no recent cache, return null to trigger fresh fetch
+    return null;
+  },
+});
+
+// Get exchange rates for multiple watched pairs
+export const getWatchedPairsRates = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const prefs = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    if (!prefs || !prefs.watchedPairs) return [];
+
+    const rates = [];
+    for (const pair of prefs.watchedPairs) {
+      const cachedRate = await ctx.db
+        .query("exchangeRates")
+        .withIndex("by_pair", (q) => 
+          q.eq("baseCurrency", pair.baseCurrency)
+           .eq("targetCurrency", pair.targetCurrency)
+        )
+        .order("desc")
+        .first();
+
+      rates.push({
+        pairId: pair.id,
+        baseCurrency: pair.baseCurrency,
+        targetCurrency: pair.targetCurrency,
+        rate: cachedRate?.rate || null,
+        lastUpdated: cachedRate?.timestamp || null,
+        needsRefresh: !cachedRate || (Date.now() - cachedRate.timestamp) >= 5 * 60 * 1000,
+      });
+    }
 
     return rates;
   },
 });
 
-// Fetch and store exchange rates (called by action)
-export const storeExchangeRates = internalMutation({
-  args: {
+// Fetch and store exchange rate for a specific pair
+export const fetchExchangeRate = action({
+  args: { 
     baseCurrency: v.string(),
-    rates: v.record(v.string(), v.number()),
+    targetCurrency: v.string(),
   },
-  handler: async (ctx, args) => {
-    await ctx.db.insert("exchangeRates", {
-      baseCurrency: args.baseCurrency,
-      rates: args.rates,
-      timestamp: Date.now(),
-    });
-  },
-});
-
-// Action to fetch exchange rates from external API
-export const fetchExchangeRates = action({
-  args: { baseCurrency: v.string() },
   handler: async (ctx, args) => {
     try {
-      // console.log(`Fetching rates for ${args.baseCurrency}...`);
-      
       const response = await fetch(
         `https://api.exchangerate-api.com/v4/latest/${args.baseCurrency}`
       );
@@ -210,44 +248,81 @@ export const fetchExchangeRates = action({
       }
       
       const data = await response.json();
-      // console.log(`Received rates for ${args.baseCurrency}:`, Object.keys(data.rates).length, 'currencies');
+      const rate = data.rates[args.targetCurrency];
       
-      // Store the rates using the internal mutation
-      await ctx.runMutation(internal.forex.storeExchangeRates, {
+      if (!rate) {
+        throw new Error(`Rate not found for ${args.targetCurrency}`);
+      }
+
+      // Store only the specific rate we need
+      await ctx.runMutation(internal.forex.storeExchangeRate, {
         baseCurrency: args.baseCurrency,
-        rates: data.rates,
+        targetCurrency: args.targetCurrency,
+        rate,
+      });
+
+      // Store historical data for this specific pair
+      await ctx.runMutation(internal.forex.storeHistoricalRate, {
+        baseCurrency: args.baseCurrency,
+        targetCurrency: args.targetCurrency,
+        rate,
+      });
+
+      // Check alerts for this specific pair
+      await ctx.runMutation(internal.forex.checkPairAlerts, {
+        baseCurrency: args.baseCurrency,
+        targetCurrency: args.targetCurrency,
+        rate,
       });
       
-      return data.rates;
+      return rate;
     } catch (error) {
-      console.error("Failed to fetch exchange rates:", error);
+      console.error("Failed to fetch exchange rate:", error);
       throw error;
     }
   },
 });
 
-// Check and trigger alerts
-export const checkAlerts = internalMutation({
+// Store a single exchange rate (replaces storeExchangeRates)
+export const storeExchangeRate = internalMutation({
   args: {
     baseCurrency: v.string(),
-    rates: v.record(v.string(), v.number()),
+    targetCurrency: v.string(),
+    rate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("exchangeRates", {
+      baseCurrency: args.baseCurrency,
+      targetCurrency: args.targetCurrency,
+      rate: args.rate,
+      timestamp: Date.now(),
+    });
+  },
+});
+
+// Check alerts for a specific pair (replaces checkAlerts)
+export const checkPairAlerts = internalMutation({
+  args: {
+    baseCurrency: v.string(),
+    targetCurrency: v.string(),
+    rate: v.number(),
   },
   handler: async (ctx, args) => {
     const alerts = await ctx.db
       .query("alerts")
-      .filter((q) => q.eq(q.field("baseCurrency"), args.baseCurrency))
+      .withIndex("by_currency_pair", (q) => 
+        q.eq("baseCurrency", args.baseCurrency)
+         .eq("targetCurrency", args.targetCurrency)
+      )
       .filter((q) => q.eq(q.field("isActive"), true))
       .filter((q) => q.eq(q.field("triggered"), false))
       .collect();
 
     for (const alert of alerts) {
-      const currentRate = args.rates[alert.targetCurrency];
-      if (!currentRate) continue;
-
       let shouldTrigger = false;
-      if (alert.condition === "above" && currentRate >= alert.targetRate) {
+      if (alert.condition === "above" && args.rate >= alert.targetRate) {
         shouldTrigger = true;
-      } else if (alert.condition === "below" && currentRate <= alert.targetRate) {
+      } else if (alert.condition === "below" && args.rate <= alert.targetRate) {
         shouldTrigger = true;
       }
 
@@ -260,50 +335,50 @@ export const checkAlerts = internalMutation({
   },
 });
 
-// Enhanced action that also checks alerts and stores historical data
-export const fetchExchangeRatesAndCheckAlerts = action({
-  args: { baseCurrency: v.string() },
-  handler: async (ctx, args) => {
-    try {
-      // console.log(`Fetching rates for ${args.baseCurrency}...`);
-      
-      const response = await fetch(
-        `https://api.exchangerate-api.com/v4/latest/${args.baseCurrency}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      // console.log(`Received rates for ${args.baseCurrency}:`, Object.keys(data.rates).length, 'currencies');
-      
-      // Store the rates
-      await ctx.runMutation(internal.forex.storeExchangeRates, {
-        baseCurrency: args.baseCurrency,
-        rates: data.rates,
-      });
+// Fetch rates for all watched pairs
+export const refreshWatchedPairsRates = action({
+  args: {},
+  returns: v.array(v.object({
+    pairId: v.string(),
+    baseCurrency: v.string(),
+    targetCurrency: v.string(),
+    rate: v.union(v.number(), v.null()),
+    error: v.optional(v.string()),
+  })),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
 
-      // Store historical data for trend tracking
-      for (const [targetCurrency, rate] of Object.entries(data.rates)) {
-        await ctx.runMutation(internal.forex.storeHistoricalRate, {
-          baseCurrency: args.baseCurrency,
-          targetCurrency,
-          rate: rate as number,
+    const prefs: any = await ctx.runQuery(internal.forex.getUserPreferencesInternal, { userId });
+    if (!prefs || !prefs.watchedPairs) return [];
+
+    const results: any[] = [];
+    for (const pair of prefs.watchedPairs) {
+      try {
+        const rate: number = await ctx.runAction(api.forex.fetchExchangeRate, {
+          baseCurrency: pair.baseCurrency,
+          targetCurrency: pair.targetCurrency,
+        });
+        
+        results.push({
+          pairId: pair.id,
+          baseCurrency: pair.baseCurrency,
+          targetCurrency: pair.targetCurrency,
+          rate,
+        });
+      } catch (error: any) {
+        console.error(`Failed to fetch rate for ${pair.baseCurrency}-${pair.targetCurrency}:`, error);
+        results.push({
+          pairId: pair.id,
+          baseCurrency: pair.baseCurrency,
+          targetCurrency: pair.targetCurrency,
+          rate: null,
+          error: error.message,
         });
       }
-
-      // Check alerts
-      await ctx.runMutation(internal.forex.checkAlerts, {
-        baseCurrency: args.baseCurrency,
-        rates: data.rates,
-      });
-      
-      return data.rates;
-    } catch (error) {
-      console.error("Failed to fetch exchange rates:", error);
-      throw error;
     }
+
+    return results;
   },
 });
 
@@ -430,6 +505,17 @@ async function cleanupOldHistoricalRates(
   }
 }
 
+// Internal query to get user preferences
+export const getUserPreferencesInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+  },
+});
+
 // Get historical rates for a currency pair
 export const getHistoricalRates = query({
   args: {
@@ -481,11 +567,14 @@ export const getTrendData = query({
     // Get current rate
     const currentRate = await ctx.db
       .query("exchangeRates")
-      .withIndex("by_base_currency", (q) => q.eq("baseCurrency", args.baseCurrency))
+      .withIndex("by_pair", (q) => 
+        q.eq("baseCurrency", args.baseCurrency)
+         .eq("targetCurrency", args.targetCurrency)
+      )
       .order("desc")
       .first();
 
-    const currentRateValue = currentRate?.rates?.[args.targetCurrency];
+    const currentRateValue = currentRate?.rate;
 
     // Get historical rates for the last 24 hours
     const cutoffTime = Date.now() - (24 * 60 * 60 * 1000);

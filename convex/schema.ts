@@ -30,13 +30,15 @@ const applicationTables = {
     isActive: v.boolean(),
     triggered: v.boolean(),
   }).index("by_user", ["userId"])
-    .index("by_user_and_pair", ["userId", "pairId"]),
+    .index("by_user_and_pair", ["userId", "pairId"])
+    .index("by_currency_pair", ["baseCurrency", "targetCurrency"]),
 
   exchangeRates: defineTable({
     baseCurrency: v.string(),
-    rates: v.record(v.string(), v.number()), // Dynamic object for all currency rates
+    targetCurrency: v.string(),
+    rate: v.number(),
     timestamp: v.number(),
-  }).index("by_base_currency", ["baseCurrency"])
+  }).index("by_pair", ["baseCurrency", "targetCurrency"])
     .index("by_timestamp", ["timestamp"]),
 
   historicalRates: defineTable({

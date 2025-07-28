@@ -10,34 +10,32 @@ interface AlertModalProps {
     baseCurrency: string;
     targetCurrency: string;
   };
-  currentRate: number;
+  currentRate: number | null;
   onClose: () => void;
 }
 
 const AlertModal: React.FC<AlertModalProps> = ({ pair, currentRate, onClose }) => {
-  const [targetRate, setTargetRate] = useState(currentRate.toString());
+  const [targetRate, setTargetRate] = useState(currentRate?.toString() || '0');
   const [condition, setCondition] = useState<'above' | 'below'>('above');
   
   const createAlert = useMutation(api.forex.createAlert);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    try {
-      await createAlert({
-        pairId: pair.id,
-        baseCurrency: pair.baseCurrency,
-        targetCurrency: pair.targetCurrency,
-        targetRate: parseFloat(targetRate),
-        condition,
-      });
-      
+    createAlert({
+      pairId: pair.id,
+      baseCurrency: pair.baseCurrency,
+      targetCurrency: pair.targetCurrency,
+      targetRate: parseFloat(targetRate),
+      condition,
+    }).then(() => {
       toast.success('Alert created successfully!');
       onClose();
-    } catch (error) {
+    }).catch((error) => {
       toast.error('Failed to create alert');
       console.error(error);
-    }
+    });
   };
 
   return (
@@ -57,7 +55,7 @@ const AlertModal: React.FC<AlertModalProps> = ({ pair, currentRate, onClose }) =
             </label>
             <div className="p-3 bg-gray-50 rounded-lg">
               <span className="font-semibold">{pair.baseCurrency}/{pair.targetCurrency}</span>
-              <span className="text-gray-500 ml-2">Current: {currentRate.toFixed(4)}</span>
+              <span className="text-gray-500 ml-2">Current: {currentRate?.toFixed(4) || 'N/A'}</span>
             </div>
           </div>
 

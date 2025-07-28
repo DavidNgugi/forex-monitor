@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { toast } from 'sonner';
@@ -22,12 +22,43 @@ const ForexDashboard: React.FC = () => {
   const { colors } = useTheme();
   const [showCurrencySelector, setShowCurrencySelector] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const userPreferences = useQuery(api.forex.getUserPreferences);
   const updatePreferences = useMutation(api.forex.updateUserPreferences);
   const initializeDefaults = useMutation(api.forex.initializeDefaultPairs);
+  const refreshAllRates = useAction(api.forex.refreshWatchedPairsRates);
 
   const watchedPairs = userPreferences?.watchedPairs || [];
+
+  // Initialize default pairs if user has no preferences
+  useEffect(() => {
+    if (userPreferences === null && !isLoading) {
+      void initializeDefaults();
+    }
+  }, [userPreferences, initializeDefaults, isLoading]);
+
+  // Refresh all rates when component mounts or pairs change
+  useEffect(() => {
+    if (watchedPairs.length > 0 && !isRefreshing) {
+      void handleRefreshAllRates();
+    }
+  }, [watchedPairs.length]);
+
+  const handleRefreshAllRates = async () => {
+    if (isRefreshing) return;
+    
+    setIsRefreshing(true);
+    try {
+      await refreshAllRates();
+      toast.success('Rates refreshed successfully!');
+    } catch (error) {
+      toast.error('Failed to refresh rates');
+      console.error(error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleAddPair = async (baseCurrency: string, targetCurrency: string) => {
     try {
@@ -104,16 +135,28 @@ const ForexDashboard: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <h1 className={cn("text-3xl font-bold", colors.text.primary)}>Forex Dashboard</h1>
-          <button
-            onClick={() => setShowCurrencySelector(true)}
-            disabled={isLoading}
-            className={cn(
-              "px-6 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-              colors.button.primary
-            )}
-          >
-            {isLoading ? 'Loading...' : 'Add Pair'}
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => void handleRefreshAllRates()}
+              disabled={isRefreshing}
+              className={cn(
+                "px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                colors.button.secondary
+              )}
+            >
+              {isRefreshing ? 'Refreshing...' : 'Refresh All'}
+            </button>
+            <button
+              onClick={() => setShowCurrencySelector(true)}
+              disabled={isLoading}
+              className={cn(
+                "px-6 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                colors.button.primary
+              )}
+            >
+              {isLoading ? 'Loading...' : 'Add Pair'}
+            </button>
+          </div>
         </div>
 
         {/* Main Content Grid */}
