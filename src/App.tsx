@@ -4,6 +4,7 @@ import type React from "react"
 import { useState } from "react"
 
 import { Authenticated, Unauthenticated, useQuery } from "convex/react"
+import { useConvexAuth } from "convex/react"
 import { api } from "../convex/_generated/api"
 import { SignInForm } from "./SignInForm"
 import { SignOutButton } from "./SignOutButton"
@@ -22,42 +23,71 @@ export default function App() {
   )
 }
 
+function Header({ setIsSignInModalOpen }: { setIsSignInModalOpen: (open: boolean) => void }) {
+  const { colors } = useTheme()
+  const { isAuthenticated } = useConvexAuth()
+
+  return (
+    <header
+      className={`sticky top-0 z-50 backdrop-blur-xl border-b transition-all duration-300 ${
+        isAuthenticated 
+          ? `${colors.background.card} ${colors.border.primary} shadow-lg` 
+          : `${colors.background.card}/80 ${colors.border.primary}`
+      }`}
+    >
+      <div className={`mx-auto px-4 sm:px-6 lg:px-8 ${
+        isAuthenticated ? 'w-full' : 'max-w-7xl'
+      }`}>
+        <div className={`flex items-center h-16 ${
+          isAuthenticated ? 'justify-between' : 'justify-between'
+        }`}>
+          {/* Logo - Always on the left */}
+          <div className="flex items-center space-x-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${
+              isAuthenticated 
+                ? 'bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg' 
+                : 'bg-gradient-to-r from-blue-600 to-purple-600'
+            }`}>
+              <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <h1 className={`text-xl font-bold transition-colors duration-300 ${
+              isAuthenticated 
+                ? colors.text.primary 
+                : colors.text.primary
+            }`}>ForexMonitor Pro</h1>
+          </div>
+
+          {/* Right side elements - Grouped together */}
+          <div className={`flex items-center ${
+            isAuthenticated ? 'space-x-3' : 'space-x-4'
+          }`}>
+            <ThemeToggle />
+            <Authenticated>
+              <SignOutButton />
+            </Authenticated>
+            <Unauthenticated>
+              <button
+                onClick={() => setIsSignInModalOpen(true)}
+                className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+              >
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In
+              </button>
+            </Unauthenticated>
+          </div>
+        </div>
+      </div>
+    </header>
+  )
+}
+
 function AppContent() {
   const { colors } = useTheme()
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false)
 
   return (
     <div className={`min-h-screen flex flex-col ${colors.background.primary} ${colors.text.primary}`}>
-      <header
-        className={`sticky top-0 z-50 backdrop-blur-xl ${colors.background.card}/80 border-b ${colors.border.primary}`}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-white" />
-              </div>
-              <h1 className={`text-xl font-bold ${colors.text.primary}`}>ForexMonitor Pro</h1>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              <ThemeToggle />
-              <Authenticated>
-                <SignOutButton />
-              </Authenticated>
-              <Unauthenticated>
-                <button
-                  onClick={() => setIsSignInModalOpen(true)}
-                  className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
-                >
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Sign In
-                </button>
-              </Unauthenticated>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header setIsSignInModalOpen={setIsSignInModalOpen} />
 
       <main className="flex-1">
         <Content setIsSignInModalOpen={setIsSignInModalOpen} />
