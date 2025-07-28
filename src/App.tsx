@@ -164,7 +164,7 @@ function SignInModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
 
         {/* Content */}
         <div className="p-6">
-          <SignInForm />
+          <SignInForm onSuccess={onClose} />
         </div>
 
       </div>

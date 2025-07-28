@@ -4,7 +4,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { getThemeColors } from "./lib/theme";
 
-export function SignInForm() {
+interface SignInFormProps {
+  onSuccess?: () => void;
+}
+
+export function SignInForm({ onSuccess }: SignInFormProps) {
   const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [submitting, setSubmitting] = useState(false);
@@ -12,28 +16,41 @@ export function SignInForm() {
   // Always use dark theme for sign-in form
   const colors = getThemeColors('dark');
 
+  const handleSignIn = async (method: "password" | "anonymous", formData?: FormData) => {
+    setSubmitting(true);
+    try {
+      if (method === "password" && formData) {
+        formData.set("flow", flow);
+        await signIn("password", formData);
+      } else {
+        await signIn("anonymous");
+      }
+      // Call onSuccess callback when authentication succeeds
+      onSuccess?.();
+    } catch (error: any) {
+      let toastTitle = "";
+      if (error.message.includes("Invalid password")) {
+        toastTitle = "Invalid password. Please try again.";
+      } else {
+        toastTitle =
+          flow === "signIn"
+            ? "Could not sign in, did you mean to sign up?"
+            : "Could not sign up, did you mean to sign in?";
+      }
+      toast.error(toastTitle);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="w-full">
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
-          setSubmitting(true);
           const formData = new FormData(e.target as HTMLFormElement);
-          formData.set("flow", flow);
-          void signIn("password", formData).catch((error) => {
-            let toastTitle = "";
-            if (error.message.includes("Invalid password")) {
-              toastTitle = "Invalid password. Please try again.";
-            } else {
-              toastTitle =
-                flow === "signIn"
-                  ? "Could not sign in, did you mean to sign up?"
-                  : "Could not sign up, did you mean to sign in?";
-            }
-            toast.error(toastTitle);
-            setSubmitting(false);
-          });
+          void handleSignIn("password", formData);
         }}
       >
         <input
@@ -79,7 +96,8 @@ export function SignInForm() {
       </div>
       <button 
         className={`w-full px-4 py-3 rounded-lg ${colors.button.primary} font-semibold transition-colors shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed`} 
-        onClick={() => void signIn("anonymous")}
+        onClick={() => void handleSignIn("anonymous")}
+        disabled={submitting}
       >
         Sign in anonymously
       </button>
