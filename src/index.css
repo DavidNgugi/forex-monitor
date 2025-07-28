@@ -37,8 +37,19 @@
   color-scheme: light;
 }
 
+/* Theme color utilities */
 .accent-text {
   @apply text-slate-600;
+}
+
+/* Form field spacing */
+.gap-form-field {
+  gap: 1rem;
+}
+
+/* Rounded container utility */
+.rounded-container {
+  border-radius: 0.5rem;
 }
 
 body {

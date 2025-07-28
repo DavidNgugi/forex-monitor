@@ -2,16 +2,18 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTheme } from "./lib/ThemeContext";
 
 export function SignInForm() {
   const { signIn } = useAuthActions();
+  const { colors } = useTheme();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [submitting, setSubmitting] = useState(false);
 
   return (
     <div className="w-full">
       <form
-        className="flex flex-col gap-form-field"
+        className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
           setSubmitting(true);
@@ -33,23 +35,27 @@ export function SignInForm() {
         }}
       >
         <input
-          className="auth-input-field"
+          className={`w-full px-4 py-3 rounded-lg ${colors.background.secondary} ${colors.border.accent} border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow shadow-sm hover:shadow`}
           type="email"
           name="email"
           placeholder="Email"
           required
         />
         <input
-          className="auth-input-field"
+          className={`w-full px-4 py-3 rounded-lg ${colors.background.secondary} ${colors.border.accent} border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow shadow-sm hover:shadow`}
           type="password"
           name="password"
           placeholder="Password"
           required
         />
-        <button className="auth-button" type="submit" disabled={submitting}>
+        <button 
+          className={`w-full px-4 py-3 rounded-lg ${colors.button.primary} font-semibold transition-colors shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed`} 
+          type="submit" 
+          disabled={submitting}
+        >
           {flow === "signIn" ? "Sign in" : "Sign up"}
         </button>
-        <div className="text-center text-sm text-secondary">
+        <div className={`text-center text-sm ${colors.text.secondary}`}>
           <span>
             {flow === "signIn"
               ? "Don't have an account? "
@@ -57,7 +63,7 @@ export function SignInForm() {
           </span>
           <button
             type="button"
-            className="text-primary hover:text-primary-hover hover:underline font-medium cursor-pointer"
+            className={`${colors.text.accent} hover:underline font-medium cursor-pointer`}
             onClick={() => setFlow(flow === "signIn" ? "signUp" : "signIn")}
           >
             {flow === "signIn" ? "Sign up instead" : "Sign in instead"}
@@ -65,11 +71,14 @@ export function SignInForm() {
         </div>
       </form>
       <div className="flex items-center justify-center my-3">
-        <hr className="my-4 grow border-gray-200" />
-        <span className="mx-4 text-secondary">or</span>
-        <hr className="my-4 grow border-gray-200" />
+        <hr className={`my-4 grow ${colors.border.primary}`} />
+        <span className={`mx-4 ${colors.text.secondary}`}>or</span>
+        <hr className={`my-4 grow ${colors.border.primary}`} />
       </div>
-      <button className="auth-button" onClick={() => void signIn("anonymous")}>
+      <button 
+        className={`w-full px-4 py-3 rounded-lg ${colors.button.primary} font-semibold transition-colors shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed`} 
+        onClick={() => void signIn("anonymous")}
+      >
         Sign in anonymously
       </button>
     </div>

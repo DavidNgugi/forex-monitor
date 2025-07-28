@@ -172,7 +172,7 @@ const CurrencyPairCard: React.FC<CurrencyPairCardProps> = ({ pair, onRemove }) =
           {/* Rate Display */}
           <div className="relative mb-4">
             <div className="flex items-end space-x-2">
-              <span className={cn("text-2xl font-bold tracking-tight", colors.text.primary)}>{formatRate(currentRate)}</span>
+              <span className={cn("text-2xl font-bold tracking-tight", colors.text.primary)}>{formatRate(currentRate || undefined)}</span>
               {currentRate && (
                 <div className="flex items-center space-x-1 mb-1">
                   {getTrendIcon()}
